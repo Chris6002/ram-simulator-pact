@@ -1,15 +1,37 @@
 #include <stdio.h>
 #include <iostream>
 #include <cstdlib>
-#include <opencv2/opencv.hpp>
+#include <cmath>
 
-using namespace cv;
+using namespace std;
+
+class Address{
+
+    public:
+
+    int x;
+    int y;
+    int address;
+
+    Address(){}
+    Address(int a, int b) : x(a), y(b) {}
+    bool operator == (Address a){
+
+        if(x == a.x && y == a.y){
+            return true;
+        }
+
+        return false;
+    }
+};
 
 double PI = 3.14159265358979323846;
 
 int w ,h;
 
 int RAM_SIZE;
+
+int SRAM_access = 0, DRAM_access = 0;
 
 double toRadian(double a){
     return a / 180.0 * PI;
@@ -81,16 +103,41 @@ void matrixMultiplication(double* vector, double matrix[3][3], double res[3]) {
 
 }
 
+void loadSRAM(Address *sram, int size, Address src){
+
+
+
+}
+
+void initDRAM(Address*** dram){
+
+    dram = new Address **[h];
+
+    for(int i = 0; i < w; i++){
+
+        dram[i] = new Address*[h];
+        
+        for(int j = 0; j < h; j++){
+
+            dram[i][j] = new Address(i, j);
+        }
+    }
+}
+
 int main(int argc, char** argv) {
 
     // get width and height
-    w = image.cols;
-    h = image.rows;
+    w = 3840;
+    h = 2160;
+    RAM_SIZE = 627 * 1024 / 3;
+    int fw = 1174, fh = 1080;
+    int fovX = 110, fovY = 90;
+    double hp = 45,ht = 45;
 
-    int fw = atof(argv[2]), fh = atof(argv[3]);
-    int fovX = atof(argv[4]), fovY = atof(argv[5]);
-    double hp = atof(argv[8]),ht = atof(argv[7]);
+    Address SRAM[RAM_SIZE];
+    Address ***DRAM;
 
+    initDRAM(DRAM);
     // convert to radian
     double htr = toRadian(ht);
     double hpr = toRadian(hp);
@@ -133,8 +180,7 @@ int main(int argc, char** argv) {
                 break;
             }
             // assign the pixel value
-           
-            fov.at<Vec3b>(b,a) = image.at<Vec3b>(nearestNeighbor (res[1]), nearestNeighbor (res[0]));
+           // fov.at<Vec3b>(b,a) = image.at<Vec3b>(nearestNeighbor (res[1]), nearestNeighbor (res[0]));
             
         }
         a = 0;
