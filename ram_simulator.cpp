@@ -35,8 +35,11 @@ class RAM_Access{
 
 int RAM_SIZE, mode;
 
-int SRAM_access = 0, DRAM_access = 0;
+long long SRAM_access = 0, DRAM_access = 0;
 
+long long ram_load = 0;
+long ten2eight = 100000000;
+long DRAM_access_m = 0;
 /*
  *  VR Projection
  */
@@ -132,6 +135,10 @@ void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int mode){
                 }
 
                 DRAM_access++;
+                if(DRAM_access == ten2eight){
+                    DRAM_access_m++;
+                    DRAM_access = 0;
+                }
             }
             break;
     }
@@ -243,6 +250,7 @@ int main(int argc, char** argv) {
 
     int a = 0, b = 0;
 
+    int pixel_count = 0;
     // default head orientation is 0,90
     for (double i = 90  - fovY/2.0; i < 90 + fovY/2.0; i+= fovY*1.0/fh, b++) {
         for (double j = -fovX/2.0; j < fovX/2.0; j+= fovX*1.0/fw, a++) {
@@ -272,15 +280,18 @@ int main(int argc, char** argv) {
             if(!check_sram(temp_x, temp_y, SRAM)){
 
                 loadSRAM(DRAM, SRAM, temp_x, mode);
+                ram_load++;
             }
             SRAM_access++;
 
+//            printf("Pixel: %d\n", pixel_count++);
         }
         a = 0;
     }
 
-    printf("DRAM Access: %d\n", DRAM_access);
+    printf("DRAM Access: %dE+08 %d\n", DRAM_access_m, DRAM_access);
     printf("SRAM Access: %d\n", SRAM_access);
+    printf("SRAM Load: %d\n", ram_load);
 
     return 0;
 }
