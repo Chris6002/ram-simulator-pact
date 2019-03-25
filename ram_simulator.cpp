@@ -23,14 +23,7 @@ class RAM_Access{
         x = old.x;
         y = old.y;
     }
-//    bool operator == (RAM_Access a){
-//
-//        if(x == a.x && y == a.y){
-//            return true;
-//        }
-//
-//        return false;
-//    }
+
 };
 
 int RAM_SIZE, mode;
@@ -45,7 +38,10 @@ long DRAM_access_m = 0;
  */
 double PI = 3.14159265358979323846;
 
-int w ,h;
+int w, h;
+int fw, fh;
+int fovX, fovY;
+double hp, ht;
 
 double toRadian(double a){
     return a / 180.0 * PI;
@@ -103,6 +99,70 @@ void cartesian2coordinates(double x, double y, double z, double result[2]){
     spherical2coordinates(the, phi, result);
 }
 
+//New approach
+void coordinates2spherical(double i, double j, double result[2]){
+    double theta, phi;
+
+    if (i >= w / 2.0){
+
+        theta = (2 * i * PI / w) - PI;
+
+    }
+    else{
+
+        theta = (2 * i * PI / w) + PI;
+
+    }
+    phi = j * PI / h;
+    //printf("theta: %lf , phi: %lf\n", theta,phi);
+    result[0] = theta;
+    result[1] = phi;
+}
+
+
+void cartesian2coordinates_inverse(double x, double y, double z, double result[2]){
+
+    double the;
+    // pay atentions to atan2 vs atan
+    if (x != 0){
+
+        the = atan2(y, x);
+
+    }
+    else{
+
+        the = toRadian(90.0);
+
+    }
+
+    double phi = acos(z);
+
+    the = the / PI * 180.0;
+    phi = phi / PI * 180.0;
+
+    if(the >= -fovX/2.0 && the <= fovX/2 && phi >= 90 -fovY/2.0 && phi <= 90 +fovY/2.0){
+
+        result[0] = (the + fovX/2.0)* fw /fovX;
+        result[1] = (phi -  90  + fovY/2.0) * fh/ fovY;
+    }
+    else{
+
+        result[0] = 0;
+        result[1] = 0;
+    }
+}
+
+
+void coordinates2cartesian(double i, double j, double result[3]){
+
+    double angles [] = {0.0, 0.0};
+
+    coordinates2spherical(i, j, angles);
+
+    spherical2cartesian(angles[0],angles[1],result);
+
+}
+
 void matrixMultiplication(double* vector, double matrix[3][3], double res[3]) {
 
     for (int i=0; i<3; i++) {
@@ -115,23 +175,40 @@ void matrixMultiplication(double* vector, double matrix[3][3], double res[3]) {
 
 }
 
-void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int mode){
+void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int j,  int mode){
 
-    int m = i, n = 0;
+    int m, n;
+    int pattern;
 
-    switch (mode) {
+    if(mode == 0){
+        m = i;
+        n = j;
+        pattern = 2;
+    }
+    else if(mode == 2){
+        m = i;
+        n = 0;
+        pattern = 2;
+    }
+
+    switch (pattern) {
 
         case 0:
+            // load by square patches
+
+
+        case 2:
+            // load by lines sequentially
             for (int s = 0; s < RAM_SIZE; s++) {
                 sram[s] = dram[m][n];
-                n++;
+                m++;
 //                printf("sram i: %d, j:%d\n", sram[s]->x, sram[s]->y);
-                if (m > w - 1)
+                if (m == w - 1){
+                    m = 0;
+                    n++;
+                }
+                if (n > h - 1) {
                     break;
-
-                if (n == h) {
-                    m++;
-                    n = 0;
                 }
 
                 DRAM_access++;
@@ -145,40 +222,13 @@ void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int mode){
 
 }
 
-void initDRAM(RAM_Access*** dram){
-
-    dram = new RAM_Access **[h];
-
-    for(int i = 0; i < w; i++){
-
-        dram[i] = new RAM_Access*[h];
-
-        for(int j = 0; j < h; j++){
-
-            dram[i][j] = new RAM_Access(i, j);
-//            printf("i: %d, j:%d\n", dram[i][j]->x, dram[i][j]->y);
-        }
-    }
-}
-
-void initSRAM(RAM_Access** sram){
-
-    sram = new RAM_Access *[RAM_SIZE];
-
-    for(int i = 0; i < RAM_SIZE; i++){
-
-        sram[i] = new RAM_Access(-1, -1);
-        //printf("i: %d, j:%d\n", sram[i]->x, sram[i]->y);
-    }
-}
-
 bool sram_contains(int i, int j, RAM_Access** sram){
 
     for(int s = 0; s < RAM_SIZE; s++){
 
         if(sram[s]->x == i && sram[s]->y == j){
 
-            return  true;
+            return true;
         }
     }
 
@@ -192,16 +242,23 @@ bool check_sram(int i, int j, RAM_Access** sram){
 
 int main(int argc, char** argv) {
 
+    // parameter for simulator
     // number of pixels sram could store
     // 627 is in KB
     RAM_SIZE = 627 * 1024 / 3;
+    mode = 0;
 
-    // get width and height
+    // input image size
     w = 3840;
     h = 2160;
-    int fw = 1174, fh = 1080;
-    int fovX = 110, fovY = 90;
-    double hp = 45,ht = 45;
+
+    // parameters for FOV
+    fw = 1174;
+    fh = 1080;
+    fovX = 110;
+    fovY = 90;
+    hp = 45;
+    ht = 45;
 
     RAM_Access **SRAM = (RAM_Access**)calloc(RAM_SIZE, sizeof(RAM_Access));
 
@@ -227,9 +284,6 @@ int main(int argc, char** argv) {
 //            printf("i: %d, j:%d\n", dram[i][j]->x, dram[i][j]->y);
         }
     }
-//
-//    initDRAM(DRAM);
-//    initSRAM(SRAM);
 
     // convert to radian
     double htr = toRadian(ht);
@@ -250,14 +304,71 @@ int main(int argc, char** argv) {
 
     int a = 0, b = 0;
 
-    int pixel_count = 0;
-    // default head orientation is 0,90
-    for (double i = 90  - fovY/2.0; i < 90 + fovY/2.0; i+= fovY*1.0/fh, b++) {
-        for (double j = -fovX/2.0; j < fovX/2.0; j+= fovX*1.0/fw, a++) {
+    if(mode == 0) {
 
-            double p1[] = {0.0, 0.0, 0.0};
-            spherical2cartesian(toRadian((j < 0) ? j + 360 : j), toRadian((i < 0) ? (i + 180) : i), p1);
+        double rot_y_inverse[3][3] = {
+                {cos(hpr),  0, sin(hpr)},
+                {0,         1, 0},
+                {-sin(hpr), 0, cos(hpr)}};
+
+        double rot_z_inverse[3][3] = {
+                {cos(htr), -sin(htr), 0},
+                {sin(htr), cos(htr),  0},
+                {0,        0,         1}};
+
+        //border on the input frame that map to output pixels
+
+        double maxX = -INFINITY;
+        double minX = INFINITY;
+        double maxY = -INFINITY;
+        double minY = INFINITY;
+
+        double jT = -fovX / 2.0;
+        double jR = fovX / 2.0;
+        double jB = -fovX / 2.0;
+        double jL = 360 - fovX / 2.0;
+        double iT = 90 - fovY / 2.0;
+        double iR = 90 - fovY / 2.0;
+        double iB = 90 + fovY / 2.0;
+        double iL = 90 - fovY / 2.0;
+
+        double i = 0.0;
+        double j = 0.0;
+
+        for(int k = 0; k < 2*(fh+fw); k++){
+
+            //Top
+            if (k < fw){
+                i = iT;
+                j = jT;
+                jT +=  fovX * 1.0 / fw;
+            }
+
+            //Right
+            if ((k >= fw) && (k < fw+fh)){
+                i = iR;
+                j = jR;
+                iR += fovY * 1.0 / fh;
+            }
+
+            //Bottom
+            if ((k >= fw+fh) && (k < 2*fw+fh)){
+                i = iB;
+                j = jB;
+                jB +=  fovX * 1.0 / fw;
+            }
+
+            //Left
+            if ((k >= 2*fw+fh) && (k < 2*(fw+fh))){
+                i = iL;
+                j = jL;
+                iL += fovY * 1.0 / fh;
+            }
+
             // rotation along y axis
+            double p1[] = {0.0, 0.0, 0.0};
+            spherical2cartesian(toRadian((j < 0)? (j + 360): j), toRadian((i < 0) ? (i + 180) : i), p1);
+
             double p2[] = {0.0, 0.0, 0.0};
             matrixMultiplication(p1, rot_y, p2);
 
@@ -265,28 +376,115 @@ int main(int argc, char** argv) {
             double p3[] = {0.0, 0.0, 0.0};
             matrixMultiplication(p2, rot_z, p3);
 
-            double res[] = {0.0,0.0};
+            double res[] = {0.0, 0.0};
 
             // convert 3D catesian to 2D coordinates
             cartesian2coordinates(p3[0], p3[1], p3[2], res);
 
-            if (b >= fh || a >= fw){
-                break;
-            }
+            if (b >= fh) break;
 
-            int temp_x = nearestNeighbor (res[0]);
-            int temp_y = nearestNeighbor (res[1]);
+            if (minX > res[0]) minX = res[0];
+            if (maxX < res[0]) maxX = res[0];
+            if (minY > res[1]) minY = res[1];
+            if (maxY < res[1]) maxY = res[1];
 
-            if(!check_sram(temp_x, temp_y, SRAM)){
 
-                loadSRAM(DRAM, SRAM, temp_x, mode);
-                ram_load++;
-            }
-            SRAM_access++;
-
-//            printf("Pixel: %d\n", pixel_count++);
         }
-        a = 0;
+
+        if (hp <= -45 || hp >= 315){
+
+            maxY = h;
+            maxX = w;
+            minX = 0.0;
+
+        }
+        if(hp >= 45) {
+
+            minY = 0.0;
+            maxX = w;
+            minX = 0.0;
+
+        }
+
+        //for input pixel in the output range, calculate the outpout cordinnates
+        int x , y;
+
+        for (y = 0; y < h; y++){
+            for (x = 0; x < w; x++){
+
+                //if pixel map to output get input index
+                if (x <= maxX && x >= minX && y <= maxY && y >= minY){
+
+//                    double cartesian []  ={0.0, 0.0, 0.0};
+//                    coordinates2cartesian(x, y, cartesian);
+//
+//                    double p1[] = {0.0, 0.0, 0.0};
+//                    matrixMultiplication(cartesian, rot_z_inverse , p1);
+//
+//                    // rotate along z axis
+//                    double p2[] = {0.0, 0.0, 0.0};
+//                    matrixMultiplication( p1, rot_y_inverse, p2);
+//
+//
+//                    double res[] = {0.0,0.0};
+//                    cartesian2coordinates_inverse(p2[0], p2[1], p2[2], res);
+////                    fov.at<Vec3b>(nearestNeighbor(res[1]), nearestNeighbor(res[0])) = image.at<Vec3b>(y,x);
+//
+//                    int temp_x = nearestNeighbor(res[0]);
+//                    int temp_y = nearestNeighbor(res[1]);
+
+                    if (!check_sram(x, y, SRAM)) {
+
+                        loadSRAM(DRAM, SRAM, x, y, mode);
+                        ram_load++;
+                    }
+                    SRAM_access++;
+
+                }
+            }
+        }
+    }
+
+    else {
+
+        //    int pixel_count = 0;
+        // default head orientation is 0,90
+        for (double i = 90 - fovY / 2.0; i < 90 + fovY / 2.0; i += fovY * 1.0 / fh, b++) {
+            for (double j = -fovX / 2.0; j < fovX / 2.0; j += fovX * 1.0 / fw, a++) {
+
+                double p1[] = {0.0, 0.0, 0.0};
+                spherical2cartesian(toRadian((j < 0) ? j + 360 : j), toRadian((i < 0) ? (i + 180) : i), p1);
+                // rotation along y axis
+                double p2[] = {0.0, 0.0, 0.0};
+                matrixMultiplication(p1, rot_y, p2);
+
+                // rotate along z axis
+                double p3[] = {0.0, 0.0, 0.0};
+                matrixMultiplication(p2, rot_z, p3);
+
+                double res[] = {0.0, 0.0};
+
+                // convert 3D catesian to 2D coordinates
+                cartesian2coordinates(p3[0], p3[1], p3[2], res);
+
+                if (b >= fh || a >= fw) {
+                    break;
+                }
+
+                int temp_x = nearestNeighbor(res[0]);
+                int temp_y = nearestNeighbor(res[1]);
+
+                if (!check_sram(temp_x, temp_y, SRAM)) {
+
+                    loadSRAM(DRAM, SRAM, temp_x, temp_y, 2);
+                    ram_load++;
+                }
+                SRAM_access++;
+
+                //            printf("Pixel: %d\n", pixel_count++);
+            }
+            a = 0;
+        }
     }
 
     printf("DRAM Access: %dE+08 %d\n", DRAM_access_m, DRAM_access);
