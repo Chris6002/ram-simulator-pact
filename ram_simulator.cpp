@@ -169,13 +169,12 @@ void matrixMultiplication(double* vector, double matrix[3][3], double res[3]) {
         for (int j=0; j<3; j++) {
 
             res[i] += matrix[i][j] * vector[j];
-
         }
     }
 
 }
 
-void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int j,  int mode){
+void loadSRAM(RAM_Access ***dram, int** sram, int i, int j,  int mode){
 
     int m, n;
     int pattern;
@@ -200,10 +199,10 @@ void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int j,  int mode){
         case 2:
             // load by lines sequentially
             for (int s = 0; s < RAM_SIZE; s++) {
-                sram[s] = dram[m][n];
+                sram[m][n] = (int)&dram[m][n];
+//                printf("sram: %d, dram: %d\n", sram[m][n], (int)&dram[m][n]);
                 m++;
-//                printf("sram i: %d, j:%d\n", sram[s]->x, sram[s]->y);
-                if (m == w - 1){
+                if (m > w - 1){
                     m = 0;
                     n++;
                 }
@@ -222,30 +221,22 @@ void loadSRAM(RAM_Access ***dram, RAM_Access **sram, int i, int j,  int mode){
 
 }
 
-bool sram_contains(int i, int j, RAM_Access** sram){
-
-    for(int s = 0; s < RAM_SIZE; s++){
-
-        if(sram[s]->x == i && sram[s]->y == j){
-
-            return true;
-        }
-    }
-
-    return false;
-}
-
-bool check_sram(int i, int j, RAM_Access** sram){
-
-    return sram_contains(i, j, sram);
-}
+//bool sram_contains(int i, int j, int** sram){
+//
+//    return sram[i][j] != 0;
+//}
+//
+//bool check_sram(int i, int j, int** sram){
+//
+//    return sram_contains(i, j, sram);
+//}
 
 int main(int argc, char** argv) {
 
     // parameter for simulator
     // number of pixels sram could store
     // 627 is in KB
-    RAM_SIZE = 627 * 1024 / 3;
+    RAM_SIZE = 627 * 1024 / 3; //214016
     mode = 0;
 
     // input image size
@@ -257,17 +248,14 @@ int main(int argc, char** argv) {
     fh = 1080;
     fovX = 110;
     fovY = 90;
-    hp = 45;
-    ht = 45;
+    hp = 5;
+    ht = 0;
 
-    RAM_Access **SRAM = (RAM_Access**)calloc(RAM_SIZE, sizeof(RAM_Access));
+    int **SRAM = (int**)calloc(w, sizeof(int*));
 
-    SRAM = new RAM_Access *[RAM_SIZE];
+    for(int i = 0; i < w; i++){
 
-    for(int i = 0; i < RAM_SIZE; i++){
-
-        SRAM[i] = new RAM_Access(-1, -1);
-        //printf("i: %d, j:%d\n", sram[i]->x, sram[i]->y);
+        SRAM[i] = (int*)calloc(h, sizeof(int));
     }
 
     RAM_Access ***DRAM = (RAM_Access***)calloc(w, sizeof(RAM_Access**));
@@ -406,6 +394,7 @@ int main(int argc, char** argv) {
 
         }
 
+        printf("Max: %lf %lf, Min: %lf %lf\n", maxX, maxY, minX, minY);
         //for input pixel in the output range, calculate the outpout cordinnates
         int x , y;
 
@@ -433,12 +422,59 @@ int main(int argc, char** argv) {
 //                    int temp_x = nearestNeighbor(res[0]);
 //                    int temp_y = nearestNeighbor(res[1]);
 
-                    if (!check_sram(x, y, SRAM)) {
+                    if (SRAM[x][y] == 0) {
+                        for(int a = 0; a < w; a++){
+                            for(int b = 0; b < h; b++){
+                                SRAM[a][b] = 0;
+                            }
+                        }
+//                        loadSRAM(DRAM, SRAM, x, y, mode);
+                        int m, n;
+                        int pattern;
 
-                        loadSRAM(DRAM, SRAM, x, y, mode);
+                        if(mode == 0){
+                            m = x;
+                            n = y;
+                            pattern = 2;
+                        }
+                        else if(mode == 2){
+                            m = x;
+                            n = 0;
+                            pattern = 2;
+                        }
+
+                        switch (pattern) {
+
+                            case 0:
+                                // load by square patches
+
+
+                            case 2:
+                                // load by lines sequentially
+                                for (int s = 0; s < RAM_SIZE; s++) {
+                                    SRAM[m][n] = (int)&DRAM[m][n];
+//                printf("sram: %d, dram: %d\n", sram[m][n], (int)&dram[m][n]);
+                                    m++;
+                                    if (m > w - 1){
+                                        m = 0;
+                                        n++;
+                                    }
+                                    if (n > h - 1) {
+                                        break;
+                                    }
+
+                                    DRAM_access++;
+                                    if(DRAM_access == ten2eight){
+                                        DRAM_access_m++;
+                                        DRAM_access = 0;
+                                    }
+                                }
+                                break;
+                        }
                         ram_load++;
                     }
                     SRAM_access++;
+//                    printf("x: %d, y :%d\n",x, y);
 
                 }
             }
@@ -473,10 +509,60 @@ int main(int argc, char** argv) {
 
                 int temp_x = nearestNeighbor(res[0]);
                 int temp_y = nearestNeighbor(res[1]);
+//                printf("sram: %d\n" ,SRAM[temp_x][temp_y]);
+                if (SRAM[temp_x][temp_y] == 0) {
+                    for(int a = 0; a < w; a++){
+                        for(int b = 0; b < h; b++){
+                            SRAM[a][b] = 0;
+                        }
+                    }
+//                    loadSRAM(DRAM, SRAM, temp_x, temp_y, 2);
+//                    printf("RAM load: %d\n", ram_load);
 
-                if (!check_sram(temp_x, temp_y, SRAM)) {
+                    int m, n;
+                    int pattern;
 
-                    loadSRAM(DRAM, SRAM, temp_x, temp_y, 2);
+                    if(mode == 0){
+                        m = temp_x;
+                        n = temp_y;
+                        pattern = 2;
+                    }
+                    else if(mode == 2){
+                        m = 0;
+                        n = temp_y;
+                        pattern = 2;
+                    }
+
+                    switch (pattern) {
+
+                        case 0:
+                            // load by square patches
+
+
+                        case 2:
+                            // load by lines sequentially
+                            for (int s = 0; s < RAM_SIZE; s++) {
+                                SRAM[m][n] = (int)&DRAM[m][n];
+//                                printf("sram: %d, dram: %d\n", SRAM[temp_x][temp_y], (int)&DRAM[m][n]);
+                                m++;
+                                if (m > w - 1){
+                                    m = 0;
+                                    n++;
+                                }
+                                if (n > h - 1) {
+                                    break;
+                                }
+
+                                DRAM_access++;
+                                if(DRAM_access == ten2eight){
+                                    DRAM_access_m++;
+                                    DRAM_access = 0;
+                                }
+                            }
+                            break;
+                    }
+
+//                    printf("value: %d\n", SRAM[temp_x][temp_y]);
                     ram_load++;
                 }
                 SRAM_access++;
