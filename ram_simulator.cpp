@@ -180,8 +180,6 @@ int RAM_SIZE, mode;
 long long SRAM_access = 0, DRAM_access = 0;
 
 long long ram_load = 0;
-long ten2eight = 100000000;
-long DRAM_access_m = 0;
 /*
  *  VR Projection
  */
@@ -360,11 +358,7 @@ void loadSequentially(int i, int j){
 
         DRAM_access++;
 
-        if(DRAM_access == ten2eight){
-            DRAM_access = 0;
-            DRAM_access_m++;
-        }
-//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " READ" << endl;
+//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " P_FETCH " << dec << order++ << endl;
         auto elapsed = chrono::high_resolution_clock::now() - start;
         temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
@@ -372,7 +366,7 @@ void loadSequentially(int i, int j){
         SRAM.push(temp);
 
         col++;
-//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " WRITE" << endl;
+//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
     }
 }
 
@@ -381,13 +375,11 @@ void loadSRAM(int i, int j, int mode) {
     if (SRAM.isFull(RAM_SIZE)) {
         for (int m = 0; m < w; m++)
             SRAM.pop();
-//        cout << "Flush Cache Line" << endl;
     }
 
     if(mode == 0){
 
         loadSequentially(i ,j);
-//        cout << "Load Cache Line" << endl;
         ram_load++;
     }
 
@@ -431,7 +423,12 @@ int main(int argc, char** argv) {
             DRAM[i][j] = 0;
         }
     }
-
+/*
+ * DRAM Access: 0E+08 196560
+SRAM Access: 52800
+SRAM Load: 273
+ *
+ * */
 
 //    for(int i = 0; i < 100; i++){
 //        RAM_Access temp;
@@ -603,12 +600,11 @@ int main(int argc, char** argv) {
                         SRAM.set_freq(addr);
 
                     }
-                    else{
-//                        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "READ" << endl;
-                    }
 
-                    cv::Vec3b pixel = SRAM.get_pixel(addr);
-                    fov.at<cv::Vec3b>(temp_y, temp_x) = pixel;
+//                    cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "P_FETCH " << dec << order++ << endl;
+
+                    // Image Test
+                    fov.at<cv::Vec3b>(temp_y, temp_x) = SRAM.get_pixel(addr);
                     SRAM_access++;
                 }
             }
@@ -617,41 +613,56 @@ int main(int argc, char** argv) {
         cout << "Max X, Y: " << maxX << ", " << maxY << " Min X, Y: " << minX << ", " << minY << endl;
     }
 //
-//    else {
+    else {
+
+        //    int pixel_count = 0;
+        // default head orientation is 0,90
+        for (double i = 90 - fovY / 2.0; i < 90 + fovY / 2.0; i += fovY * 1.0 / fh, b++) {
+            for (double j = -fovX / 2.0; j < fovX / 2.0; j += fovX * 1.0 / fw, a++) {
+
+                double p1[] = {0.0, 0.0, 0.0};
+                spherical2cartesian(toRadian((j < 0) ? j + 360 : j), toRadian((i < 0) ? (i + 180) : i), p1);
+                // rotation along y axis
+                double p2[] = {0.0, 0.0, 0.0};
+                matrixMultiplication(p1, rot_y, p2);
+
+                // rotate along z axis
+                double p3[] = {0.0, 0.0, 0.0};
+                matrixMultiplication(p2, rot_z, p3);
+
+                double res[] = {0.0, 0.0};
+
+                // convert 3D catesian to 2D coordinates
+                cartesian2coordinates(p3[0], p3[1], p3[2], res);
+
+                if (b >= fh || a >= fw) {
+                    break;
+                }
+
+                int temp_x = nearestNeighbor(res[0]);
+                int temp_y = nearestNeighbor(res[1]);
+
+                uintptr_t addr = (uintptr_t)&DRAM[temp_y][temp_x];
+
+                if(!check_SRAM(addr)){
+
+                    loadSRAM(temp_x, temp_y, 0);
+
+                    SRAM.set_freq(addr);
+
+                }
+
+//                    cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "P_FETCH " << dec << order++ << endl;
+
+                // Image Test
+                fov.at<cv::Vec3b>(b, a) = SRAM.get_pixel(addr);
+                SRAM_access++;
+            }
+            a = 0;
+        }
+    }
 //
-//        //    int pixel_count = 0;
-//        // default head orientation is 0,90
-//        for (double i = 90 - fovY / 2.0; i < 90 + fovY / 2.0; i += fovY * 1.0 / fh, b++) {
-//            for (double j = -fovX / 2.0; j < fovX / 2.0; j += fovX * 1.0 / fw, a++) {
-//
-//                double p1[] = {0.0, 0.0, 0.0};
-//                spherical2cartesian(toRadian((j < 0) ? j + 360 : j), toRadian((i < 0) ? (i + 180) : i), p1);
-//                // rotation along y axis
-//                double p2[] = {0.0, 0.0, 0.0};
-//                matrixMultiplication(p1, rot_y, p2);
-//
-//                // rotate along z axis
-//                double p3[] = {0.0, 0.0, 0.0};
-//                matrixMultiplication(p2, rot_z, p3);
-//
-//                double res[] = {0.0, 0.0};
-//
-//                // convert 3D catesian to 2D coordinates
-//                cartesian2coordinates(p3[0], p3[1], p3[2], res);
-//
-//                if (b >= fh || a >= fw) {
-//                    break;
-//                }
-//
-//                int temp_x = nearestNeighbor(res[0]);
-//                int temp_y = nearestNeighbor(res[1]);
-//                //            printf("Pixel: %d\n", pixel_count++);
-//            }
-//            a = 0;
-//        }
-//    }
-//
-    printf("DRAM Access: %dE+08 %d\n", DRAM_access_m, DRAM_access);
+    printf("DRAM Access: %d\n", DRAM_access);
     printf("SRAM Access: %d\n", SRAM_access);
     printf("SRAM Load: %d\n", ram_load);
 
