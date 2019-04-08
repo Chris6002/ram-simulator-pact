@@ -2,31 +2,43 @@
 #include <cmath>
 #include <queue>
 #include <cstdbool>
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+#include <iomanip>
+#include <fstream>
+#include <string>
+#include <chrono>
+#include <opencv2/opencv.hpp>
 
 using namespace std;
+
+
+const static auto start = std::chrono::system_clock::now();
 
 class RAM_Access{
 
     public:
 
-    long long address;
-    int frequency;
+    uintptr_t address;
+    long long date;
+    // Image Test
+    cv::Vec3b pixelVal;
 
     RAM_Access(){}
-    RAM_Access(unsigned long long addr){
-
-        address = addr;
-    }
 
     RAM_Access(const RAM_Access &old){
 
         address = old.address;
-        frequency = old.frequency;
+        date = old.date;
+
+        // Image Test
+        pixelVal = old.pixelVal;
     }
 
     bool operator != (const RAM_Access &another) const{
 
-        return address != another.address || frequency != another.frequency;
+        return address != another.address || date != another.date;
     }
 
 //    bool operator < (const RAM_Access& another) const{
@@ -37,7 +49,9 @@ class RAM_Access{
 };
 
 ostream& operator <<(ostream &strm, const RAM_Access &ra) {
-    return strm << "[Addr: "<< ra.address << ", Freq: " << ra.frequency << "]" << endl;
+
+    strm << "[Addr: 0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(ra.address) << ", Freq: " << ra.date << "]" << endl;
+
 }
 
 
@@ -49,7 +63,12 @@ template<
 
 public:
 
-    bool contains(const int val){
+    bool isFull(int RAM_SIZE){
+
+        return (this -> size()) >= RAM_SIZE;
+    }
+
+    bool contains(const uintptr_t val){
 
         auto first = this->c.begin();
         auto last = this->c.end();
@@ -63,6 +82,75 @@ public:
         }
         return false;
     }
+
+    // Image Test
+    cv::Vec3b get_pixel(const uintptr_t val){
+
+        auto first = this->c.begin();
+        auto last = this->c.end();
+
+        while (first != last) {
+
+            if ((*first).address == val)
+                return (*first).pixelVal;
+
+            ++first;
+        }
+
+        return 0;
+    }
+    //
+
+    uintptr_t get_addr(const uintptr_t val){
+
+        auto first = this->c.begin();
+        auto last = this->c.end();
+
+        while (first != last) {
+
+            if ((*first).address == val)
+                return (uintptr_t)&(*first);
+
+            ++first;
+        }
+
+        return 0;
+    }
+
+    void set_freq(const uintptr_t addr){
+
+        auto first = this->c.begin();
+        auto last = this->c.end();
+
+        while (first != last) {
+
+            if ((*first).address == addr){
+                auto elapsed = chrono::high_resolution_clock::now() - start;
+                (*first).date = chrono::duration_cast<chrono::microseconds>(elapsed).count();
+                break;
+            }
+
+            ++first;
+        }
+
+    }
+//
+//    int get_freq(const uintptr_t addr){
+//
+//        auto first = this->c.begin();
+//        auto last = this->c.end();
+//
+//        while (first != last) {
+//
+//            if ((*first).address == addr){
+//                return (*first).frequency;
+//            }
+//
+//            ++first;
+//        }
+//
+//        return 0;
+//    }
 };
 
 
@@ -81,10 +169,12 @@ public:
 
     bool operator()(const RAM_Access& lhs, const RAM_Access& rhs){
 
-        return lhs.frequency > rhs.frequency;
+        return  lhs.date - rhs.date > 0;
+
     }
 };
 
+// ***********************Global Variable**************************
 int RAM_SIZE, mode;
 
 long long SRAM_access = 0, DRAM_access = 0;
@@ -101,6 +191,18 @@ int w, h;
 int fw, fh;
 int fovX, fovY;
 double hp, ht;
+
+static MyQueue<RAM_Access, vector<RAM_Access>, CompareFreq> SRAM;
+static int **DRAM;
+
+// ****************Image Test*********************
+cv::Mat image = cv::imread("/home/rhein/Desktop/ram-simulator/480p.jpg");
+// *********************************************************
+
+//int order = 0;
+//ofstream trace;
+
+//****************************************************************
 
 double toRadian(double a){
     return a / 180.0 * PI;
@@ -233,57 +335,68 @@ void matrixMultiplication(double* vector, double matrix[3][3], double res[3]) {
 /*
  *  End of VR Algorithm
  */
+bool check_SRAM(uintptr_t addr){
 
-//void loadSRAM(RAM_Access ***dram, int** sram, int i, int j,  int mode){
-//
-//    int m, n;
-//    int pattern;
-//
-//    if(mode == 0){
-//        m = i;
-//        n = j;
-//        pattern = 2;
-//    }
-//    else if(mode == 2){
-//        m = i;
-//        n = 0;
-//        pattern = 2;
-//    }
-//
-//    switch (pattern) {
-//
-//        case 0:
-//            // load by square patches
-//
-//
-//        case 2:
-//            // load by lines sequentially
-//            for (int s = 0; s < RAM_SIZE; s++) {
-//                sram[m][n] = (int)&dram[m][n];
-////                printf("sram: %d, dram: %d\n", sram[m][n], (int)&dram[m][n]);
-//                m++;
-//                if (m > w - 1){
-//                    m = 0;
-//                    n++;
-//                }
-//                if (n > h - 1) {
-//                    break;
-//                }
-//
-//                DRAM_access++;
-//                if(DRAM_access == ten2eight){
-//                    DRAM_access_m++;
-//                    DRAM_access = 0;
-//                }
-//            }
-//            break;
-//    }
-//
-//}
+    return SRAM.contains(addr);
+}
+
+void loadSequentially(int i, int j){
+
+    int row = j, col = 0;
+
+    for (int m = 0; m < w; m++) {
+
+        RAM_Access temp;
+
+        if(col == w - 1){
+            col = 0;
+            row++;
+        }
+        // Image test
+        temp.pixelVal = image.at<cv::Vec3b>(row, col);
+        //
+
+        temp.address = (uintptr_t)&DRAM[row][col];
+
+        DRAM_access++;
+
+        if(DRAM_access == ten2eight){
+            DRAM_access = 0;
+            DRAM_access_m++;
+        }
+//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " READ" << endl;
+        auto elapsed = chrono::high_resolution_clock::now() - start;
+        temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+
+
+        SRAM.push(temp);
+
+        col++;
+//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " WRITE" << endl;
+    }
+}
+
+void loadSRAM(int i, int j, int mode) {
+
+    if (SRAM.isFull(RAM_SIZE)) {
+        for (int m = 0; m < w; m++)
+            SRAM.pop();
+//        cout << "Flush Cache Line" << endl;
+    }
+
+    if(mode == 0){
+
+        loadSequentially(i ,j);
+//        cout << "Load Cache Line" << endl;
+        ram_load++;
+    }
+
+}
 
 
 int main(int argc, char** argv) {
 
+//    trace.open("trace.trc");
     // parameter for simulator
     // number of pixels sram could store
     // 627 is in KB
@@ -291,26 +404,27 @@ int main(int argc, char** argv) {
     mode = 0;
 
     // input image size
-    w = 3840;
-    h = 2160;
-    const int width = w;
-    const int height = h;
+    w = 720;
+    h = 480;
+
     // parameters for FOV
-    fw = 1174;
-    fh = 1080;
+    fw = 220;
+    fh = 240;
     fovX = 110;
     fovY = 90;
-    hp = 5;
+    hp = 0;
     ht = 0;
 
-    MyQueue<RAM_Access, vector<RAM_Access>, CompareFreq> SRAM;
+    // ****************Image Test*********************
+    cv::Mat fov(fh, fw, CV_8UC3);
+// *********************************************************
+    RAM_SIZE = (RAM_SIZE / w) * w;
 
-    int **DRAM;
-    DRAM = new int*[height];
+    DRAM = new int*[h];
 
     for(int i = 0; i < h; i++){
 
-        DRAM[i] = new int[width];
+        DRAM[i] = new int[w];
 
         for(int j = 0; j < w; j++){
 
@@ -318,172 +432,190 @@ int main(int argc, char** argv) {
         }
     }
 
-    for(int i = 0; i < h; i++){
 
-        for(int j = 0; j < w; j++){
-
-//            DRAM[i][j] = (long long)(i * (3 * w) + j * 3);
-            DRAM[i][j] = 0;
-        }
-    }
-
-
-//
-//
-//
-//    // convert to radian
-//    double htr = toRadian(ht);
-//    double hpr = toRadian(hp);
-//
-//    // rotation matrices
-//    double rot_y [3][3] = {
-//            {cos(hpr), 0, -sin(hpr)},
-//            {0, 1, 0},
-//            {sin(hpr), 0, cos(hpr)}
-//    };
-//
-//    double rot_z [3][3] = {
-//            {cos(htr), sin(htr), 0},
-//            {-sin(htr), cos(htr), 0},
-//            {0, 0, 1}
-//    };
-//
-//    int a = 0, b = 0;
-//
-//    if(mode == 0) {
-//
-//        double rot_y_inverse[3][3] = {
-//                {cos(hpr),  0, sin(hpr)},
-//                {0,         1, 0},
-//                {-sin(hpr), 0, cos(hpr)}};
-//
-//        double rot_z_inverse[3][3] = {
-//                {cos(htr), -sin(htr), 0},
-//                {sin(htr), cos(htr),  0},
-//                {0,        0,         1}};
-//
-//        //border on the input frame that map to output pixels
-//
-//        double maxX = -INFINITY;
-//        double minX = INFINITY;
-//        double maxY = -INFINITY;
-//        double minY = INFINITY;
-//
-//        double jT = -fovX / 2.0;
-//        double jR = fovX / 2.0;
-//        double jB = -fovX / 2.0;
-//        double jL = 360 - fovX / 2.0;
-//        double iT = 90 - fovY / 2.0;
-//        double iR = 90 - fovY / 2.0;
-//        double iB = 90 + fovY / 2.0;
-//        double iL = 90 - fovY / 2.0;
-//
-//        double i = 0.0;
-//        double j = 0.0;
-//
-//        for(int k = 0; k < 2*(fh+fw); k++){
-//
-//            //Top
-//            if (k < fw){
-//                i = iT;
-//                j = jT;
-//                jT +=  fovX * 1.0 / fw;
-//            }
-//
-//            //Right
-//            if ((k >= fw) && (k < fw+fh)){
-//                i = iR;
-//                j = jR;
-//                iR += fovY * 1.0 / fh;
-//            }
-//
-//            //Bottom
-//            if ((k >= fw+fh) && (k < 2*fw+fh)){
-//                i = iB;
-//                j = jB;
-//                jB +=  fovX * 1.0 / fw;
-//            }
-//
-//            //Left
-//            if ((k >= 2*fw+fh) && (k < 2*(fw+fh))){
-//                i = iL;
-//                j = jL;
-//                iL += fovY * 1.0 / fh;
-//            }
-//
-//            // rotation along y axis
-//            double p1[] = {0.0, 0.0, 0.0};
-//            spherical2cartesian(toRadian((j < 0)? (j + 360): j), toRadian((i < 0) ? (i + 180) : i), p1);
-//
-//            double p2[] = {0.0, 0.0, 0.0};
-//            matrixMultiplication(p1, rot_y, p2);
-//
-//            // rotate along z axis
-//            double p3[] = {0.0, 0.0, 0.0};
-//            matrixMultiplication(p2, rot_z, p3);
-//
-//            double res[] = {0.0, 0.0};
-//
-//            // convert 3D catesian to 2D coordinates
-//            cartesian2coordinates(p3[0], p3[1], p3[2], res);
-//
-//            if (b >= fh) break;
-//
-//            if (minX > res[0]) minX = res[0];
-//            if (maxX < res[0]) maxX = res[0];
-//            if (minY > res[1]) minY = res[1];
-//            if (maxY < res[1]) maxY = res[1];
-//
-//
-//        }
-//
-//        if (hp <= -45 || hp >= 315){
-//
-//            maxY = h;
-//            maxX = w;
-//            minX = 0.0;
-//
-//        }
-//        if(hp >= 45) {
-//
-//            minY = 0.0;
-//            maxX = w;
-//            minX = 0.0;
-//
-//        }
-//
-//        printf("Max: %lf %lf, Min: %lf %lf\n", maxX, maxY, minX, minY);
-//        //for input pixel in the output range, calculate the outpout cordinnates
-//        int x , y;
-//
-//        for (y = 0; y < h; y++){
-//            for (x = 0; x < w; x++){
-//
-//                //if pixel map to output get input index
-//                if (x <= maxX && x >= minX && y <= maxY && y >= minY){
-//
-////                    double cartesian []  ={0.0, 0.0, 0.0};
-////                    coordinates2cartesian(x, y, cartesian);
-////
-////                    double p1[] = {0.0, 0.0, 0.0};
-////                    matrixMultiplication(cartesian, rot_z_inverse , p1);
-////
-////                    // rotate along z axis
-////                    double p2[] = {0.0, 0.0, 0.0};
-////                    matrixMultiplication( p1, rot_y_inverse, p2);
-////
-////
-////                    double res[] = {0.0,0.0};
-////                    cartesian2coordinates_inverse(p2[0], p2[1], p2[2], res);
-//////                    fov.at<Vec3b>(nearestNeighbor(res[1]), nearestNeighbor(res[0])) = image.at<Vec3b>(y,x);
-////
-////                    int temp_x = nearestNeighbor(res[0]);
-////                    int temp_y = nearestNeighbor(res[1]);
-//
-//                }
-//            }
-//        }
+//    for(int i = 0; i < 100; i++){
+//        RAM_Access temp;
+//        temp.address = (uintptr_t) &DRAM[i][0];
+//        auto elapsed = chrono::high_resolution_clock::now() - start;
+//        temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+//        SRAM.push(temp);
 //    }
+//
+//    print_queue(SRAM);
+
+    // convert to radian
+    double htr = toRadian(ht);
+    double hpr = toRadian(hp);
+
+    // rotation matrices
+    double rot_y [3][3] = {
+            {cos(hpr), 0, -sin(hpr)},
+            {0, 1, 0},
+            {sin(hpr), 0, cos(hpr)}
+    };
+
+    double rot_z [3][3] = {
+            {cos(htr), sin(htr), 0},
+            {-sin(htr), cos(htr), 0},
+            {0, 0, 1}
+    };
+
+    int a = 0, b = 0;
+
+    // reverse
+    if(mode == 0) {
+
+        double rot_y_inverse[3][3] = {
+                {cos(hpr),  0, sin(hpr)},
+                {0,         1, 0},
+                {-sin(hpr), 0, cos(hpr)}};
+
+        double rot_z_inverse[3][3] = {
+                {cos(htr), -sin(htr), 0},
+                {sin(htr), cos(htr),  0},
+                {0,        0,         1}};
+
+        //border on the input frame that map to output pixels
+
+        double maxX = -INFINITY;
+        double minX = INFINITY;
+        double maxY = -INFINITY;
+        double minY = INFINITY;
+
+        double jT = -fovX / 2.0;
+        double jR = fovX / 2.0;
+        double jB = -fovX / 2.0;
+        double jL = 360 - fovX / 2.0;
+        double iT = 90 - fovY / 2.0;
+        double iR = 90 - fovY / 2.0;
+        double iB = 90 + fovY / 2.0;
+        double iL = 90 - fovY / 2.0;
+
+        double i = 0.0;
+        double j = 0.0;
+
+        for(int k = 0; k < 2*(fh+fw); k++){
+
+            //Top
+            if (k < fw){
+                i = iT;
+                j = jT;
+                jT +=  fovX * 1.0 / fw;
+            }
+
+            //Right
+            if ((k >= fw) && (k < fw+fh)){
+                i = iR;
+                j = jR;
+                iR += fovY * 1.0 / fh;
+            }
+
+            //Bottom
+            if ((k >= fw+fh) && (k < 2*fw+fh)){
+                i = iB;
+                j = jB;
+                jB +=  fovX * 1.0 / fw;
+            }
+
+            //Left
+            if ((k >= 2*fw+fh) && (k < 2*(fw+fh))){
+                i = iL;
+                j = jL;
+                iL += fovY * 1.0 / fh;
+            }
+
+            // rotation along y axis
+            double p1[] = {0.0, 0.0, 0.0};
+            spherical2cartesian(toRadian((j < 0)? (j + 360): j), toRadian((i < 0) ? (i + 180) : i), p1);
+
+            double p2[] = {0.0, 0.0, 0.0};
+            matrixMultiplication(p1, rot_y, p2);
+
+            // rotate along z axis
+            double p3[] = {0.0, 0.0, 0.0};
+            matrixMultiplication(p2, rot_z, p3);
+
+            double res[] = {0.0, 0.0};
+
+            // convert 3D catesian to 2D coordinates
+            cartesian2coordinates(p3[0], p3[1], p3[2], res);
+
+            if (b >= fh) break;
+
+            if (minX > res[0]) minX = res[0];
+            if (maxX < res[0]) maxX = res[0];
+            if (minY > res[1]) minY = res[1];
+            if (maxY < res[1]) maxY = res[1];
+
+        }
+
+        if (hp <= -45 || hp >= 315){
+
+            maxY = h;
+            maxX = w;
+            minX = 0.0;
+
+        }
+        if(hp >= 45) {
+
+            minY = 0.0;
+            maxX = w;
+            minX = 0.0;
+
+        }
+
+        //for input pixel in the output range, calculate the outpout cordinnates
+        int x , y;
+
+        for (y = 0; y < h; y++){
+            for (x = 0; x < w; x++){
+
+                //if pixel map to output get input index
+                if (x <= maxX && x >= minX && y <= maxY && y >= minY){
+
+                    // ****************Image Test*********************
+                    double cartesian []  ={0.0, 0.0, 0.0};
+                    coordinates2cartesian(x, y, cartesian);
+
+                    double p1[] = {0.0, 0.0, 0.0};
+                    matrixMultiplication(cartesian, rot_z_inverse , p1);
+
+                    // rotate along z axis
+                    double p2[] = {0.0, 0.0, 0.0};
+                    matrixMultiplication( p1, rot_y_inverse, p2);
+
+
+                    double res[] = {0.0,0.0};
+                    cartesian2coordinates_inverse(p2[0], p2[1], p2[2], res);
+
+                    int temp_x = nearestNeighbor(res[0]);
+                    int temp_y = nearestNeighbor(res[1]);
+
+                    //fov.at<Vec3b>(nearestNeighbor(res[1]), nearestNeighbor(res[0])) = image.at<Vec3b>(y,x);
+                    // ************************************************
+
+                    uintptr_t addr = (uintptr_t)&DRAM[y][x];
+
+                    if(!check_SRAM(addr)){
+
+                        loadSRAM(x, y, mode);
+
+                        SRAM.set_freq(addr);
+
+                    }
+                    else{
+//                        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "READ" << endl;
+                    }
+
+                    cv::Vec3b pixel = SRAM.get_pixel(addr);
+                    fov.at<cv::Vec3b>(temp_y, temp_x) = pixel;
+                    SRAM_access++;
+                }
+            }
+        }
+
+        cout << "Max X, Y: " << maxX << ", " << maxY << " Min X, Y: " << minX << ", " << minY << endl;
+    }
 //
 //    else {
 //
@@ -519,9 +651,12 @@ int main(int argc, char** argv) {
 //        }
 //    }
 //
-//    printf("DRAM Access: %dE+08 %d\n", DRAM_access_m, DRAM_access);
-//    printf("SRAM Access: %d\n", SRAM_access);
-//    printf("SRAM Load: %d\n", ram_load);
+    printf("DRAM Access: %dE+08 %d\n", DRAM_access_m, DRAM_access);
+    printf("SRAM Access: %d\n", SRAM_access);
+    printf("SRAM Load: %d\n", ram_load);
 
+    imwrite("output.jpg", fov);
+
+//    trace.close();
     return 0;
 }
