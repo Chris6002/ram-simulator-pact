@@ -197,7 +197,7 @@ static int **DRAM;
 cv::Mat image = cv::imread("/home/rhein/Desktop/ram-simulator/480p.jpg");
 // *********************************************************
 
-//int order = 0;
+int order = 0;
 //ofstream trace;
 
 //****************************************************************
@@ -358,7 +358,7 @@ void loadSequentially(int i, int j){
 
         DRAM_access++;
 
-//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " P_FETCH " << dec << order++ << endl;
+        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " P_FETCH " << dec << order++ << endl;
         auto elapsed = chrono::high_resolution_clock::now() - start;
         temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
@@ -366,7 +366,7 @@ void loadSequentially(int i, int j){
         SRAM.push(temp);
 
         col++;
-//        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
+        cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
     }
 }
 
@@ -423,12 +423,7 @@ int main(int argc, char** argv) {
             DRAM[i][j] = 0;
         }
     }
-/*
- * DRAM Access: 0E+08 196560
-SRAM Access: 52800
-SRAM Load: 273
- *
- * */
+
 
 //    for(int i = 0; i < 100; i++){
 //        RAM_Access temp;
@@ -601,7 +596,7 @@ SRAM Load: 273
 
                     }
 
-//                    cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "P_FETCH " << dec << order++ << endl;
+                    cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(addr)) << " P_FETCH " << dec << order++ << endl;
 
                     // Image Test
                     fov.at<cv::Vec3b>(temp_y, temp_x) = SRAM.get_pixel(addr);
@@ -610,7 +605,7 @@ SRAM Load: 273
             }
         }
 
-        cout << "Max X, Y: " << maxX << ", " << maxY << " Min X, Y: " << minX << ", " << minY << endl;
+//        cout << "Max X, Y: " << maxX << ", " << maxY << " Min X, Y: " << minX << ", " << minY << endl;
     }
 //
     else {
@@ -652,7 +647,7 @@ SRAM Load: 273
 
                 }
 
-//                    cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << "P_FETCH " << dec << order++ << endl;
+                cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(addr)) << " P_FETCH " << dec << order++ << endl;
 
                 // Image Test
                 fov.at<cv::Vec3b>(b, a) = SRAM.get_pixel(addr);
@@ -662,9 +657,9 @@ SRAM Load: 273
         }
     }
 //
-    printf("DRAM Access: %d\n", DRAM_access);
-    printf("SRAM Access: %d\n", SRAM_access);
-    printf("SRAM Load: %d\n", ram_load);
+//    printf("DRAM Access: %d\n", DRAM_access);
+//    printf("SRAM Access: %d\n", SRAM_access);
+//    printf("SRAM Load: %d\n", ram_load);
 
     imwrite("output.jpg", fov);
 
