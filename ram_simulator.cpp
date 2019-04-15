@@ -14,7 +14,7 @@
 using namespace std;
 
 
-const static auto start = std::chrono::system_clock::now();
+const auto start = std::chrono::system_clock::now();
 
 class RAM_Access{
 
@@ -50,7 +50,7 @@ class RAM_Access{
 
 ostream& operator <<(ostream &strm, const RAM_Access &ra) {
 
-    strm << "[Addr: 0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(ra.address) << ", Freq: " << ra.date << "]" << endl;
+    strm << "[Addr: 0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(ra.address) << ", Freq: " << ra.date << "]" << endl;
 
 }
 
@@ -192,12 +192,13 @@ double hp, ht;
 
 static MyQueue<RAM_Access, vector<RAM_Access>, CompareFreq> SRAM;
 static int **DRAM;
+static int **DRAM_output;
 
 // ****************Image Test*********************
-cv::Mat image = cv::imread("/home/rhein/Desktop/ram-simulator/480p.jpg");
+// cv::Mat image = cv::imread("/home/rhein/Desktop/ram-simulator/1080p.jpg");
 // *********************************************************
 
-int order = 0;
+long long order;
 //ofstream trace;
 
 //****************************************************************
@@ -342,7 +343,7 @@ void loadSequentially(int i, int j){
 
     int row = j, col = 0;
 
-    for (int m = 0; m < w; m++) {
+    for (int m = 0; m < w * 2; m++) {
 
         RAM_Access temp;
 
@@ -351,14 +352,14 @@ void loadSequentially(int i, int j){
             row++;
         }
         // Image test
-        temp.pixelVal = image.at<cv::Vec3b>(row, col);
+        // temp.pixelVal = image.at<cv::Vec3b>(row, col);
         //
 
         temp.address = (uintptr_t)&DRAM[row][col];
 
         DRAM_access++;
 
-        cout << "0x"<< uppercase << hex << setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(temp.address) << " P_FETCH " << dec << order++ << endl;
+        // cout << "0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(temp.address) << " P_MEM_RD " << dec << order++ << endl;
         auto elapsed = chrono::high_resolution_clock::now() - start;
         temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
@@ -366,22 +367,33 @@ void loadSequentially(int i, int j){
         SRAM.push(temp);
 
         col++;
-        cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
+        // cout << "0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
     }
 }
 
 void loadSRAM(int i, int j, int mode) {
 
     if (SRAM.isFull(RAM_SIZE)) {
-        for (int m = 0; m < w; m++)
+        for (int m = 0; m < w * 2; m++)
             SRAM.pop();
     }
 
     if(mode == 0){
 
+        RAM_Access temp;
+        temp.address = (uintptr_t)&DRAM[j][i];
+        auto elapsed = chrono::high_resolution_clock::now() - start;
+        temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+        SRAM.push(temp);
+    }
+
+    else if(mode == 1){
+
         loadSequentially(i ,j);
         ram_load++;
     }
+
+    
 
 }
 
@@ -391,24 +403,24 @@ int main(int argc, char** argv) {
 //    trace.open("trace.trc");
     // parameter for simulator
     // number of pixels sram could store
-    // 627 is in KB
-    RAM_SIZE = 627 * 1024 / 3; //214016
-    mode = 0;
+    // 4.75 MB
+    RAM_SIZE = 4.75 * 1024 * 1024 / 3;
+    mode = stoi(argv[1]);
 
     // input image size
-    w = 720;
-    h = 480;
+    w = 1920;
+    h = 1080;
 
     // parameters for FOV
-    fw = 220;
-    fh = 240;
+    fw = 587;
+    fh = 540;
     fovX = 110;
     fovY = 90;
-    hp = 0;
-    ht = 0;
+    ht = stoi(argv[2]);
+    hp = stoi(argv[3]);
 
     // ****************Image Test*********************
-    cv::Mat fov(fh, fw, CV_8UC3);
+    // cv::Mat fov(fh, fw, CV_8UC3);
 // *********************************************************
     RAM_SIZE = (RAM_SIZE / w) * w;
 
@@ -424,7 +436,17 @@ int main(int argc, char** argv) {
         }
     }
 
+    DRAM_output = new int*[fh];
 
+    for(int i = 0; i < fh; i++){
+
+        DRAM_output[i] = new int[fw];
+
+        for(int j = 0; j < fw; j++){
+
+            DRAM_output[i][j] = 0;
+        }
+    }
 //    for(int i = 0; i < 100; i++){
 //        RAM_Access temp;
 //        temp.address = (uintptr_t) &DRAM[i][0];
@@ -588,23 +610,37 @@ int main(int argc, char** argv) {
 
                     uintptr_t addr = (uintptr_t)&DRAM[y][x];
 
-                    if(!check_SRAM(addr)){
+                    // if(!check_SRAM(addr)){
 
-                        loadSRAM(x, y, mode);
+                    loadSRAM(x, y, mode);
 
-                        SRAM.set_freq(addr);
+                    //     SRAM.set_freq(addr);
 
-                    }
-
-                    cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(addr)) << " P_FETCH " << dec << order++ << endl;
+                    // }
+                    
+                    // cout << "0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(SRAM.get_addr(addr)) << " P_MEM_RD " << dec << order++ << endl;
 
                     // Image Test
-                    fov.at<cv::Vec3b>(temp_y, temp_x) = SRAM.get_pixel(addr);
+                    // fov.at<cv::Vec3b>(temp_y, temp_x) = SRAM.get_pixel(addr);
+
+                    // DRAM_output[temp_y][temp_x] = DRAM[y][x]; 
+                    cout << "0x" << uppercase << hex <<  setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << " P_MEM_RD ";
+                    cout << dec << chrono::duration_cast<std::chrono::milliseconds>(chrono::high_resolution_clock::now() - start).count() << " ms" << endl;
                     SRAM_access++;
                 }
             }
         }
 
+        for(int i = 0; i < fh; i++){
+
+            for(int j = 0; j < fw; j++){
+
+                uintptr_t addr_out = (uintptr_t)&DRAM_output[i][j];
+                
+                cout <<"0x" << uppercase << hex <<  setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr_out) << " P_MEM_WR ";
+                cout << dec << chrono::duration_cast<std::chrono::milliseconds>(chrono::high_resolution_clock::now() - start).count() << " ms" << endl;
+            }
+        }
 //        cout << "Max X, Y: " << maxX << ", " << maxY << " Min X, Y: " << minX << ", " << minY << endl;
     }
 //
@@ -641,27 +677,39 @@ int main(int argc, char** argv) {
 
                 if(!check_SRAM(addr)){
 
-                    loadSRAM(temp_x, temp_y, 0);
+                    loadSRAM(temp_x, temp_y, mode);
 
                     SRAM.set_freq(addr);
 
                 }
 
-                cout << "0x"<< uppercase << hex << reinterpret_cast<uintptr_t>(SRAM.get_addr(addr)) << " P_FETCH " << dec << order++ << endl;
+                //   auto elapsed = chrono::high_resolution_clock::now() - start;
+                //   temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();    
+               
+                cout << "0x" << uppercase << hex <<  setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr) << " P_MEM_RD ";
+                cout << dec << chrono::duration_cast<std::chrono::milliseconds>(chrono::high_resolution_clock::now() - start).count() << " ms" << endl;
 
                 // Image Test
-                fov.at<cv::Vec3b>(b, a) = SRAM.get_pixel(addr);
+                // fov.at<cv::Vec3b>(b, a) = SRAM.get_pixel(addr);
+                // DRAM_output[b][a] = DRAM[temp_y][temp_x];
                 SRAM_access++;
+
+                uintptr_t addr_out = (uintptr_t)&DRAM_output[b][a];
+
+                cout <<"0x" << uppercase << hex <<  setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr_out) << " P_MEM_WR ";
+                cout << dec << chrono::duration_cast<std::chrono::milliseconds>(chrono::high_resolution_clock::now() - start).count() << " ms" << endl;
             }
             a = 0;
         }
     }
-//
-//    printf("DRAM Access: %d\n", DRAM_access);
-//    printf("SRAM Access: %d\n", SRAM_access);
-//    printf("SRAM Load: %d\n", ram_load);
 
-    imwrite("output.jpg", fov);
+
+//
+   // printf("DRAM Access: %d\n", DRAM_access);
+   // printf("SRAM Access: %d\n", SRAM_access);
+   // printf("SRAM Load: %d\n", ram_load);
+
+    // imwrite("output.jpg", fov);
 
 //    trace.close();
     return 0;
