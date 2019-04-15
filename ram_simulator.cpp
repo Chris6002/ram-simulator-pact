@@ -33,7 +33,7 @@ class RAM_Access{
         date = old.date;
 
         // Image Test
-        pixelVal = old.pixelVal;
+        // pixelVal = old.pixelVal;
     }
 
     bool operator != (const RAM_Access &another) const{
@@ -41,18 +41,13 @@ class RAM_Access{
         return address != another.address || date != another.date;
     }
 
-//    bool operator < (const RAM_Access& another) const{
-//
-//        return (this -> frequency > another.frequency);
-//    }
-
 };
 
-ostream& operator <<(ostream &strm, const RAM_Access &ra) {
+// ostream& operator <<(ostream &strm, const RAM_Access &ra) {
 
-    strm << "[Addr: 0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(ra.address) << ", Freq: " << ra.date << "]" << endl;
+//     strm << "[Addr: 0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(ra.address) << ", Freq: " << ra.date << "]" << endl;
 
-}
+// }
 
 
 template<
@@ -84,84 +79,33 @@ public:
     }
 
     // Image Test
-    cv::Vec3b get_pixel(const uintptr_t val){
+    // cv::Vec3b get_pixel(const uintptr_t val){
 
-        auto first = this->c.begin();
-        auto last = this->c.end();
+    //     auto first = this->c.begin();
+    //     auto last = this->c.end();
 
-        while (first != last) {
+    //     while (first != last) {
 
-            if ((*first).address == val)
-                return (*first).pixelVal;
+    //         if ((*first).address == val)
+    //             return (*first).pixelVal;
 
-            ++first;
-        }
+    //         ++first;
+    //     }
 
-        return 0;
-    }
+    //     return 0;
+    // }
     //
-
-    uintptr_t get_addr(const uintptr_t val){
-
-        auto first = this->c.begin();
-        auto last = this->c.end();
-
-        while (first != last) {
-
-            if ((*first).address == val)
-                return (uintptr_t)&(*first);
-
-            ++first;
-        }
-
-        return 0;
-    }
-
-    void set_freq(const uintptr_t addr){
-
-        auto first = this->c.begin();
-        auto last = this->c.end();
-
-        while (first != last) {
-
-            if ((*first).address == addr){
-                auto elapsed = chrono::high_resolution_clock::now() - start;
-                (*first).date = chrono::duration_cast<chrono::microseconds>(elapsed).count();
-                break;
-            }
-
-            ++first;
-        }
-
-    }
-//
-//    int get_freq(const uintptr_t addr){
-//
-//        auto first = this->c.begin();
-//        auto last = this->c.end();
-//
-//        while (first != last) {
-//
-//            if ((*first).address == addr){
-//                return (*first).frequency;
-//            }
-//
-//            ++first;
-//        }
-//
-//        return 0;
-//    }
 };
 
 
-template<typename A> void print_queue(A& pq)
-{
-    while (!pq.empty())
-    {
-        cout << pq.top() << endl;
-        pq.pop();
-    }
-}
+// template<typename A> void print_queue(A& pq)
+// {
+//     while (!pq.empty())
+//     {
+//         cout << pq.top() << endl;
+//         pq.pop();
+//     }
+// }
 
 
 class CompareFreq{
@@ -359,7 +303,6 @@ void loadSequentially(int i, int j){
 
         DRAM_access++;
 
-        // cout << "0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(temp.address) << " P_MEM_RD " << dec << order++ << endl;
         auto elapsed = chrono::high_resolution_clock::now() - start;
         temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
 
@@ -367,7 +310,6 @@ void loadSequentially(int i, int j){
         SRAM.push(temp);
 
         col++;
-        // cout << "0x"<< uppercase << hex << setfill('0') << setw(12) << reinterpret_cast<uintptr_t>(SRAM.get_addr(temp.address)) << " P_MEM_WR " << dec << order++ << endl;
     }
 }
 
@@ -390,8 +332,8 @@ void loadSRAM(int i, int j, int mode) {
     else if(mode == 1){
 
         loadSequentially(i ,j);
-        ram_load++;
     }
+    ram_load++;
 
     
 
@@ -407,13 +349,63 @@ int main(int argc, char** argv) {
     RAM_SIZE = 4.75 * 1024 * 1024 / 3;
     mode = stoi(argv[1]);
 
-    // input image size
-    w = 1920;
-    h = 1080;
+    int resolution = stoi(argv[4]);
 
-    // parameters for FOV
-    fw = 587;
-    fh = 540;
+    switch(resolution){
+
+        case 0:
+            // 480
+            // input image size
+            w = 720;
+            h = 480;
+
+            // parameters for FOV
+            fw = 220;
+            fh = 240;
+            break;
+
+        case 1:
+            // 720p
+            // input image size
+            w = 1280;
+            h = 720;
+
+            // parameters for FOV
+            fw = 392;
+            fh = 360;
+            break;
+        case 2:
+            // 1080p
+            // input image size
+            w = 1920;
+            h = 1080;
+
+            // parameters for FOV
+            fw = 587;
+            fh = 540;
+            break;
+        case 3:
+            // 2K
+            // input image size
+            w = 2048;
+            h = 1080;
+
+            // parameters for FOV
+            fw = 626;
+            fh = 540;
+            break;
+        case 4:
+            // 4K
+            // input image size
+            w = 3840;
+            h = 2160;
+
+            // parameters for FOV
+            fw = 1174;
+            fh = 1080;
+            break;
+    }
+
     fovX = 110;
     fovY = 90;
     ht = stoi(argv[2]);
@@ -447,15 +439,6 @@ int main(int argc, char** argv) {
             DRAM_output[i][j] = 0;
         }
     }
-//    for(int i = 0; i < 100; i++){
-//        RAM_Access temp;
-//        temp.address = (uintptr_t) &DRAM[i][0];
-//        auto elapsed = chrono::high_resolution_clock::now() - start;
-//        temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
-//        SRAM.push(temp);
-//    }
-//
-//    print_queue(SRAM);
 
     // convert to radian
     double htr = toRadian(ht);
@@ -678,9 +661,6 @@ int main(int argc, char** argv) {
                 if(!check_SRAM(addr)){
 
                     loadSRAM(temp_x, temp_y, mode);
-
-                    SRAM.set_freq(addr);
-
                 }
 
                 //   auto elapsed = chrono::high_resolution_clock::now() - start;
@@ -710,7 +690,5 @@ int main(int argc, char** argv) {
    // printf("SRAM Load: %d\n", ram_load);
 
     // imwrite("output.jpg", fov);
-
-//    trace.close();
     return 0;
 }
