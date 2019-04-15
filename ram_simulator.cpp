@@ -595,7 +595,7 @@ int main(int argc, char** argv) {
 
                     // if(!check_SRAM(addr)){
 
-                    loadSRAM(x, y, mode);
+                    // loadSRAM(x, y, mode);
 
                     //     SRAM.set_freq(addr);
 
@@ -658,10 +658,10 @@ int main(int argc, char** argv) {
 
                 uintptr_t addr = (uintptr_t)&DRAM[temp_y][temp_x];
 
-                if(!check_SRAM(addr)){
+                // if(!check_SRAM(addr)){
 
-                    loadSRAM(temp_x, temp_y, mode);
-                }
+                //     loadSRAM(temp_x, temp_y, mode);
+                // }
 
                 //   auto elapsed = chrono::high_resolution_clock::now() - start;
                 //   temp.date = chrono::duration_cast<std::chrono::microseconds>(elapsed).count();    
