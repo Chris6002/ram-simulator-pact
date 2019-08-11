@@ -426,7 +426,7 @@ int main(int argc, char** argv) {
                     // DRAM_output[temp_y][temp_x] = DRAM[y][x]; 
 
              	    
-             	    uintptr_t addr_out = (uintptr_t)&DRAM_output[i][j];
+             	    uintptr_t addr_out = (uintptr_t)&DRAM_output[temp_x][temp_y];
              	    cout <<"0x" << uppercase << hex <<  setfill('0') << setw(8) << reinterpret_cast<uintptr_t>(addr_out) << " P_MEM_WR "<< endl;
                 }
             }
